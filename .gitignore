@@ -1,0 +1,10 @@
+# CMake build output
+/build/
+/cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+
+# Compiled artifacts
+*.o
+*.a
