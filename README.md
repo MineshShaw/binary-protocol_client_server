@@ -60,8 +60,8 @@ required commands are `./bserve` and `./bcurl`.
 4. Try the other supported methods:
 
    ```sh
-   ./bcurl -X HEAD localhost:9000/proof.txt
-   ./bcurl -X POST --data ./tests/dummy_files/upload.bin localhost:9000/echo
+   ./bcurl -v -X HEAD localhost:9000/proof.txt
+   ./bcurl -v -X POST --data ./tests/dummy_files/upload.bin localhost:9000/echo
    ```
 
    HEAD returns headers with no body. POST is a safe echo operation; the fixture bytes are returned unchanged and never written to disk. Use `-v` with either command to inspect its binary frames.
@@ -69,7 +69,7 @@ required commands are `./bserve` and `./bcurl`.
 5. Verify missing-file handling and the nonzero client exit status:
 
    ```sh
-   ./bcurl localhost:9000/does-not-exist
+   ./bcurl -v localhost:9000/does-not-exist
    echo $?
    ```
 
@@ -78,7 +78,7 @@ required commands are `./bserve` and `./bcurl`.
 6. Verify malformed-path handling and the binary 400 response:
 
    ```sh
-   ./bcurl localhost:9000/../not-allowed
+   ./bcurl -v localhost:9000/../not-allowed
    echo $?
    ```
 
