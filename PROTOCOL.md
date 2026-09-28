@@ -1,6 +1,6 @@
 # Binary HTTP Protocol
 
-This protocol carries a deliberately small HTTP/1.0-style request/response model over a persistent TCP connection. All multi-byte integers are unsigned and big-endian. Payloads are binary-safe; header names/values are text without NUL bytes.
+This protocol carries a deliberately small HTTP/1.0-style request/response model over a persistent TCP connection. Every byte on the connection belongs to a framed binary message; HTTP request lines, CRLF delimiters, and text-formatted HTTP header blocks are never transmitted. All multi-byte integers are unsigned and big-endian. Header names/values are text without NUL bytes, carried only as length-delimited fields within binary frames; DATA is binary-safe.
 
 ## Frame format
 
@@ -40,7 +40,9 @@ These names are the ten fields used by this implementation. Method values are `G
 
 The client sends one HEADERS request frame with method, absolute path, host, user-agent, and content-length. GET and HEAD require Content-Length `0`. POST carries the declared number of bytes in DATA frames. The server maps GET/HEAD paths under the configured root directory, serves raw file bytes, and returns 404 when no regular file exists. HEAD returns no body. To give POST deterministic behavior without writing to the document root, this sample server responds 200 with the submitted body unchanged; Content-Type is copied from the request or defaults to `application/octet-stream`.
 
-Responses include `:status`, `content-length`, `content-type`, `date`, `server`, and `connection: keep-alive`. A 4xx or 5xx response causes `bcurl` to exit nonzero. Malformed complete requests receive 400. The server leaves the TCP connection open after a response; EOF or transport failure ends that connection.
+Responses include `:status`, `content-length`, `content-type`, `date`, `server`, and `connection: keep-alive`. A 4xx or 5xx response causes `bcurl` to exit nonzero. Malformed complete requests receive 400. The server leaves the TCP connection open after a response; EOF or transport failure ends that connection. A `bcurl` invocation sends one request on one TCP connection and never opens a second connection.
+
+After the complete response is received, `bcurl` writes the entity body to standard output as a 16-byte-per-line hex/ASCII hexdump (offset, hexadecimal octets, and printable-byte column). In verbose mode, the hexdump of each complete on-wire frame is additionally written to standard error.
 
 ### Unknown types (forward compatibility)
 

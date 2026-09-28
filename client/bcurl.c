@@ -190,12 +190,14 @@ static int read_response(int fd, int verbose, const char *method) {
     int ended = 0;
     uint64_t body_bytes = 0;
     uint64_t expected_length = UINT64_MAX;
+    uint8_t *response_body = NULL;
 
     while (!ended) {
         FrameHeader header;
         uint8_t *payload = NULL;
         if (read_frame(fd, &header, &payload) != 0) {
             fprintf(stderr, "connection closed before response END_STREAM\n");
+            free(response_body);
             return 2;
         }
         if (verbose) {
@@ -207,6 +209,7 @@ static int read_response(int fd, int verbose, const char *method) {
         }
         if ((header.flags & ~FRAME_FLAG_END_STREAM) != 0 || header.request_id != 1) {
             free(payload);
+            free(response_body);
             fprintf(stderr, "malformed response frame\n");
             return 2;
         }
@@ -215,6 +218,7 @@ static int read_response(int fd, int verbose, const char *method) {
             HpackHeaderList fields;
             if (got_headers || hpack_decode(payload, header.length, &fields) != 0) {
                 free(payload);
+                free(response_body);
                 fprintf(stderr, "malformed response headers\n");
                 return 2;
             }
@@ -228,6 +232,7 @@ static int read_response(int fd, int verbose, const char *method) {
                 || status[2] < '0' || status[2] > '9') {
                 hpack_list_free(&fields);
                 free(payload);
+                free(response_body);
                 fprintf(stderr, "response is missing a valid :status\n");
                 return 2;
             }
@@ -236,31 +241,45 @@ static int read_response(int fd, int verbose, const char *method) {
             char *end = NULL;
             errno = 0;
             unsigned long long value = strtoull(length, &end, 10);
-            if (errno != 0 || end == length || *end != '\0') {
+            if (errno != 0 || end == length || *end != '\0'
+                || value > FRAME_U24_MAX) {
                 hpack_list_free(&fields);
                 free(payload);
+                free(response_body);
                 fprintf(stderr, "invalid response Content-Length\n");
                 return 2;
             }
             expected_length = value;
+            uint64_t body_capacity = strcmp(method, "HEAD") == 0 ? 0 : expected_length;
+            response_body = malloc(body_capacity == 0 ? 1 : (size_t)body_capacity);
+            if (!response_body) {
+                hpack_list_free(&fields);
+                free(payload);
+                fprintf(stderr, "failed to allocate response body\n");
+                return 2;
+            }
             got_headers = 1;
             hpack_list_free(&fields);
         } else if (header.type == FRAME_TYPE_DATA) {
             if (!got_headers || strcmp(method, "HEAD") == 0) {
                 free(payload);
+                free(response_body);
                 fprintf(stderr, "unexpected response DATA frame\n");
                 return 2;
             }
-            if (header.length > 0
-                && fwrite(payload, 1, header.length, stdout) != header.length) {
+            if (header.length > expected_length - body_bytes) {
                 free(payload);
-                perror("stdout");
+                free(response_body);
+                fprintf(stderr, "response body exceeds Content-Length\n");
                 return 2;
             }
+            if (header.length > 0) {
+                memcpy(response_body + body_bytes, payload, header.length);
+            }
             body_bytes += header.length;
-            fflush(stdout);
         } else {
             free(payload);
+            free(response_body);
             fprintf(stderr, "server sent an ERROR frame\n");
             return 2;
         }
@@ -271,9 +290,12 @@ static int read_response(int fd, int verbose, const char *method) {
     if (!got_headers || (strcmp(method, "HEAD") != 0
                          && expected_length != UINT64_MAX
                          && body_bytes != expected_length)) {
+        free(response_body);
         fprintf(stderr, "response ended with incomplete headers or body\n");
         return 2;
     }
+    hexdump(stdout, response_body, (size_t)body_bytes);
+    free(response_body);
     return status_code >= 400 ? 1 : 0;
 }
 
