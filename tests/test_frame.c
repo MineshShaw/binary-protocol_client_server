@@ -1,6 +1,8 @@
 #include "frame.h"
+#include "hexdump.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -67,6 +69,33 @@ int main(void) {
 
     if (frame_type_known(0x99) || !frame_type_known(FRAME_TYPE_DATA)) {
         return fail("type known");
+    }
+
+    const uint8_t headers_payload[] = {1, 0, 3, 'G', 'E', 'T'};
+    FrameHeader headers_frame = {
+        .length = sizeof(headers_payload),
+        .type = FRAME_TYPE_HEADERS,
+        .flags = FRAME_FLAG_END_STREAM,
+        .request_id = 1
+    };
+    FILE *dump = tmpfile();
+    if (!dump) {
+        return fail("tmpfile for annotated hexdump");
+    }
+    hexdump_frame_annotated(dump, "test", &headers_frame, headers_payload);
+    if (fflush(dump) != 0 || fseek(dump, 0, SEEK_SET) != 0) {
+        fclose(dump);
+        return fail("rewind annotated hexdump");
+    }
+    char annotation[2048];
+    size_t annotation_len = fread(annotation, 1, sizeof(annotation) - 1, dump);
+    annotation[annotation_len] = '\0';
+    fclose(dump);
+    if (!strstr(annotation, "fixed header [0..7], payload begins at byte 8")
+        || !strstr(annotation, "index byte 8 = 0x01")
+        || !strstr(annotation, "value-length bytes [9..10] = 3")
+        || !strstr(annotation, "value bytes [11..13] = \"GET\"")) {
+        return fail("annotated hexdump byte ranges");
     }
 
     printf("test_frame: ok\n");

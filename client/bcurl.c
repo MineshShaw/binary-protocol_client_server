@@ -101,7 +101,7 @@ static uint8_t *read_file(const char *path, size_t *length) {
 static int send_frame(int fd, const FrameHeader *header, const void *payload,
                       int verbose) {
     if (verbose) {
-        hexdump_frame(stderr, "outgoing", header, payload);
+        hexdump_frame_annotated(stderr, "client sent", header, payload);
     }
     return frame_write_full(fd, header, payload);
 }
@@ -201,7 +201,7 @@ static int read_response(int fd, int verbose, const char *method) {
             return 2;
         }
         if (verbose) {
-            hexdump_frame(stderr, "incoming", &header, payload);
+            hexdump_frame_annotated(stderr, "client received", &header, payload);
         }
         if (!frame_type_known(header.type)) {
             free(payload);
@@ -294,7 +294,17 @@ static int read_response(int fd, int verbose, const char *method) {
         fprintf(stderr, "response ended with incomplete headers or body\n");
         return 2;
     }
-    hexdump(stdout, response_body, (size_t)body_bytes);
+    if (body_bytes > 0
+        && fwrite(response_body, 1, (size_t)body_bytes, stdout) != body_bytes) {
+        perror("stdout");
+        free(response_body);
+        return 2;
+    }
+    if (fflush(stdout) != 0) {
+        perror("stdout");
+        free(response_body);
+        return 2;
+    }
     free(response_body);
     return status_code >= 400 ? 1 : 0;
 }

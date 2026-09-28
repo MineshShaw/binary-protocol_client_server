@@ -45,15 +45,14 @@ static int read_frame(int fd, ReceivedFrame *frame) {
             return -1;
         }
     }
-    if (g_verbose) {
-        hexdump_frame(stderr, "incoming", &frame->header, frame->payload);
-    }
+    hexdump_frame_annotated(stderr, "server received", &frame->header,
+                            frame->payload);
     return 0;
 }
 
 static int send_frame(int fd, const FrameHeader *header, const void *payload) {
     if (g_verbose) {
-        hexdump_frame(stderr, "outgoing", header, payload);
+        hexdump_frame_annotated(stderr, "server sent", header, payload);
     }
     return frame_write_full(fd, header, payload);
 }
@@ -395,6 +394,22 @@ static int handle_request(int fd, const char *root, ReceivedFrame *frame) {
     return result;
 }
 
+static void wait_for_peer_close(int fd) {
+    uint8_t discard[4096];
+    for (;;) {
+        ssize_t received = read(fd, discard, sizeof(discard));
+        if (received == 0) {
+            return;
+        }
+        if (received < 0 && errno == EINTR) {
+            continue;
+        }
+        if (received < 0) {
+            return;
+        }
+    }
+}
+
 static void serve_connection(int fd, const char *root) {
     for (;;) {
         ReceivedFrame frame;
@@ -411,9 +426,10 @@ static void serve_connection(int fd, const char *root) {
         }
         int result = handle_request(fd, root, &frame);
         free_frame(&frame);
-        if (result != 0) {
-            return;
+        if (result == 0) {
+            wait_for_peer_close(fd);
         }
+        return;
     }
 }
 
