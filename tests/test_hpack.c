@@ -19,6 +19,10 @@ int main(void) {
     if (hpack_static_index("x-custom") != 0) {
         return fail("dynamic name should be index 0");
     }
+    if (hpack_static_index("date") != HPACK_IDX_DATE
+        || hpack_static_index("connection") != HPACK_IDX_CONNECTION) {
+        return fail("static response headers");
+    }
 
     HpackHeaderList list;
     hpack_list_init(&list);
@@ -63,6 +67,14 @@ int main(void) {
     HpackHeaderList bad;
     if (hpack_decode(enc, 2, &bad) == 0) {
         return fail("truncated decode should fail");
+    }
+    const uint8_t nul_name[] = {HPACK_INDEX_DYNAMIC, 1, 0, 0, 1, 'a'};
+    if (hpack_decode(nul_name, sizeof(nul_name), &bad) == 0) {
+        return fail("NUL in header name should fail");
+    }
+    const uint8_t nul_value[] = {HPACK_INDEX_DYNAMIC, 1, 'x', 0, 1, 0};
+    if (hpack_decode(nul_value, sizeof(nul_value), &bad) == 0) {
+        return fail("embedded NUL should fail");
     }
 
     hpack_list_free(&list);

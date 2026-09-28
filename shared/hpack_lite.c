@@ -11,10 +11,10 @@ static const char *const k_static_table[HPACK_STATIC_TABLE_SIZE + 1] = {
     "content-type",
     "content-length",
     "host",
-    "accept",
     "user-agent",
-    "connection",
-    "server"
+    "server",
+    "date",
+    "connection"
 };
 
 const char *hpack_static_name(uint8_t index) {
@@ -57,7 +57,7 @@ void hpack_list_free(HpackHeaderList *list) {
 }
 
 int hpack_list_add(HpackHeaderList *list, const char *name, const char *value) {
-    if (!list || !name || !value) {
+    if (!list || !name || name[0] == '\0' || !value) {
         return -1;
     }
     if (list->count == list->capacity) {
@@ -206,8 +206,17 @@ int hpack_decode(const uint8_t *buf, uint32_t len, HpackHeaderList *list) {
                 hpack_list_free(list);
                 return -1;
             }
+            if (nlen == 0) {
+                hpack_list_free(list);
+                return -1;
+            }
             name = malloc((size_t)nlen + 1);
             if (!name || read_bytes(buf, len, &off, name, nlen) != 0) {
+                free(name);
+                hpack_list_free(list);
+                return -1;
+            }
+            if (memchr(name, '\0', nlen) != NULL) {
                 free(name);
                 hpack_list_free(list);
                 return -1;
@@ -236,6 +245,12 @@ int hpack_decode(const uint8_t *buf, uint32_t len, HpackHeaderList *list) {
         uint32_t vlen = ((uint32_t)vbytes[0] << 8) | (uint32_t)vbytes[1];
         char *value = malloc((size_t)vlen + 1);
         if (!value || read_bytes(buf, len, &off, value, vlen) != 0) {
+            free(name);
+            free(value);
+            hpack_list_free(list);
+            return -1;
+        }
+        if (memchr(value, '\0', vlen) != NULL) {
             free(name);
             free(value);
             hpack_list_free(list);
