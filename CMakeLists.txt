@@ -21,9 +21,15 @@ target_include_directories(proto_shared PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/share
 
 add_executable(bserve server/bserve.c)
 target_link_libraries(bserve PRIVATE proto_shared)
+set_target_properties(bserve PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
 
 add_executable(bcurl client/bcurl.c)
 target_link_libraries(bcurl PRIVATE proto_shared)
+set_target_properties(bcurl PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
 
 enable_testing()
 

@@ -51,9 +51,7 @@ static int read_frame(int fd, ReceivedFrame *frame) {
 }
 
 static int send_frame(int fd, const FrameHeader *header, const void *payload) {
-    if (g_verbose) {
-        hexdump_frame_annotated(stderr, "server sent", header, payload);
-    }
+    hexdump_frame_annotated(stderr, "server sent", header, payload);
     return frame_write_full(fd, header, payload);
 }
 

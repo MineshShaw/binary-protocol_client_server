@@ -8,3 +8,7 @@ cmake_install.cmake
 # Compiled artifacts
 *.o
 *.a
+
+# Submission command-line binaries
+/bserve
+/bcurl

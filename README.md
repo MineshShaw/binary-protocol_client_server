@@ -24,40 +24,65 @@ cmake --build cmake-build-local
 ctest --test-dir cmake-build-local --output-on-failure
 ```
 
+The build places the two submission binaries at the repository root, so the
+required commands are `./bserve` and `./bcurl`.
+
 ## Manually test client and server
 
-1. In terminal 1, launch the server with the included document root:
+1. Generate a small document root and test file:
 
    ```sh
-   ./cmake-build-local/bserve ./tests/dummy_files/www 9000
+   mkdir -p ./demo-root
+   printf 'OK\n' > ./demo-root/proof.txt
    ```
 
-   The server prints every complete incoming request frame to standard error. Its dump includes the raw frame bytes, the fixed-header/payload boundary, and offsets for each compressed header.
+   The repository also includes equivalent fixtures under
+   `tests/dummy_files/`.
 
-2. In terminal 2, fetch the included proof resource:
+2. In terminal 1, launch the server with the generated document root:
 
    ```sh
-   ./cmake-build-local/bcurl -v localhost:9000/proof.txt
+   ./bserve ./demo-root 9000
+   ```
+
+   The server prints every complete request and response frame to standard
+   error. Each dump includes raw bytes, the fixed-header/payload boundary,
+   and offsets for each compressed header.
+
+3. In terminal 2, fetch the generated proof resource:
+
+   ```sh
+   ./bcurl -v localhost:9000/proof.txt
    ```
 
    `bcurl` makes one TCP connection, sends a binary GET request, parses the binary response on that same connection, and writes the raw response body (`OK\n`) to standard output. With `-v`, it also prints full annotated sent/received frame dumps to standard error. Compare the exchange to [the annotated proof](PROTOCOL.md#annotated-exchange).
 
-3. Try the other supported methods:
+4. Try the other supported methods:
 
    ```sh
-   ./cmake-build-local/bcurl -X HEAD localhost:9000/index.html
-   ./cmake-build-local/bcurl -X POST --data ./tests/dummy_files/upload.bin localhost:9000/echo
+   ./bcurl -X HEAD localhost:9000/proof.txt
+   ./bcurl -X POST --data ./tests/dummy_files/upload.bin localhost:9000/echo
    ```
 
    HEAD returns headers with no body. POST is a safe echo operation; the fixture bytes are returned unchanged and never written to disk. Use `-v` with either command to inspect its binary frames.
 
-4. Verify missing-file handling and the nonzero client exit status:
+5. Verify missing-file handling and the nonzero client exit status:
 
    ```sh
-   ./cmake-build-local/bcurl localhost:9000/does-not-exist
+   ./bcurl localhost:9000/does-not-exist
    echo $?
    ```
 
    The response body is `Not Found` and the exit status is nonzero for the 404. Stop the server with Ctrl-C.
+
+6. Verify malformed-path handling and the binary 400 response:
+
+   ```sh
+   ./bcurl localhost:9000/../not-allowed
+   echo $?
+   ```
+
+   The server returns `Bad Request` and `bcurl` exits nonzero. No text HTTP
+   request line or text header block is sent in either case.
 
 Each connection carries one logical request (HEADERS plus optional POST DATA frames). The server sends the response and leaves that socket open until the client closes it. Unknown frame types are skipped by consuming exactly their declared payload length; see `PROTOCOL.md` for framing, header mapping, and byte-level parsing.
